@@ -1,21 +1,21 @@
 use crate::utils::calcul_linear::get_coefficient;
 
 pub struct LinearRegression{
-    m: f32,
-    b:f32
+    weights: f32,
+    bias:f32
 }
 
 
 impl LinearRegression {
 
     pub fn new() -> Self{
-        LinearRegression { m: 0.0, b: 0.0 }
+        LinearRegression { weights: 0.0, bias: 0.0 }
     }
 
 
     pub fn fit(&mut self, x : &[f32], y:&[f32])->(f32, f32){
-       (self.m, self.b) = get_coefficient(x, y);
-       (self.m, self.b)
+       (self.weights, self.bias) = get_coefficient(x, y);
+       (self.weights, self.bias)
     }
 
 
@@ -23,7 +23,7 @@ impl LinearRegression {
         let mut prediction: Vec<f32> = Vec::new();
 
         for item in x{
-            let y = self.m * item+self.b;
+            let y = self.weights * item+self.bias;
             prediction.push(y);
         }
 
@@ -31,11 +31,11 @@ impl LinearRegression {
     }
 
     pub fn slope(&self)->f32{
-        self.m
+        self.weights
     }
 
     pub fn intercept(&self)->f32{
-        self.b
+        self.bias
     }
 }
 
