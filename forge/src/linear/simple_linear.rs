@@ -1,25 +1,33 @@
 use crate::utils::calcul_linear::get_coefficient;
-use crate::metrics::error::{mae, mse, rmse, r2};
 
-pub fn fit(x_train : &[f32], y_train:&[f32], x_test:&[f32], y_test:&[f32]){
-    let mut prediction: Vec<f32> = Vec::new();
+pub struct LinearRegression{
+    m: f32,
+    b:f32
+}
 
-    let (m, b)  = get_coefficient(x_train, y_train);
 
-    for x in x_test{
-        let y = m*x + b;
-        prediction.push(y);
+impl LinearRegression {
+
+    pub fn new() -> Self{
+        LinearRegression { m: 0.0, b: 0.0 }
     }
 
-    let mae = mae::mae(y_test, &prediction);
-    let mse = mse::mean_squared_error(y_test, &prediction);
-    let rmse = rmse::rmse(mse);
-    let r2 = r2::r2(y_test, &prediction);
+
+    pub fn fit(&mut self, x : &[f32], y:&[f32])->(f32, f32){
+       (self.m, self.b) = get_coefficient(x, y);
+       (self.m, self.b)
+    }
 
 
-    println!("Prediction : {:?}", prediction);
-    println!("MAE : {:?}", mae);
-    println!("MSE : {:?}", mse);
-    println!("RMSE : {:?}", rmse);
-    println!("R2 : {:?}", r2);
+    pub fn predict(&self, x:&[f32])-> Vec<f32>{
+        let mut prediction: Vec<f32> = Vec::new();
+
+        for item in x{
+            let y = self.m * item+self.b;
+            prediction.push(y);
+        }
+
+        prediction
+    }
 }
+

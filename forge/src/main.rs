@@ -1,6 +1,6 @@
 use std::{error::Error, fs::File};
 
-use ml::linear;
+use ml::{linear::simple_linear::LinearRegression, metrics::error::r2::r2};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let file = File::open(r"../data/Salary_Data.csv")?;
@@ -11,21 +11,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut x_test: Vec<f32> = Vec::new();
     let mut y_test: Vec<f32> = Vec::new();
 
-    for (i, result) in rdr.records().enumerate() {
-        let record = result?;
-        let xi: f32 = record[0].parse()?;
-        let yi: f32 = record[1].parse()?;
 
-        if i % 5 == 0 {
-            x_test.push(xi);
-            y_test.push(yi);
-        } else {
-            x_train.push(xi);
-            y_train.push(yi);
-        }
-    }
+    let mut model = LinearRegression::new();
+    model.fit(&x_train, &y_train);
+    let pred = model.predict(&x_test);
+    let score = r2(&y_test, &pred);
 
-    linear::simple_linear::fit(&x_train, &y_train, &x_test, &y_test);
+    println!("{:?}", pred);
+    println!("{:?}", score);
 
     Ok(())
 }
