@@ -29,5 +29,13 @@ impl LinearRegression {
 
         prediction
     }
+
+    pub fn slope(&self)->f32{
+        self.m
+    }
+
+    pub fn intercept(&self)->f32{
+        self.b
+    }
 }
 
