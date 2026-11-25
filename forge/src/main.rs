@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         y.push(record[n_cols - 1].parse()?);
     }
 
-    let (x_train, x_test, y_train, y_test) = train_test_split(&x, &y, 0.2);
+    let (x_train, x_test, y_train, y_test) = train_test_split(&x, &y, 0.2, Some(42));
 
     // 3. Entraînement et évaluation : inchangés
     let mut model = MultipleLinearRegression::new(0.01, 5000);
