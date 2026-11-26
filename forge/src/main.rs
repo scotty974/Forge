@@ -1,16 +1,13 @@
 use std::{error::Error, fs::File};
 
 use ml::{
-    linear::multiple_linear::MultipleLinearRegression,
-    metrics::error::{mae::mae, r2::r2},
-    utils::split::train_test_split,
+    linear::multiple_linear::MultipleLinearRegression, metrics::error::{mae::mae, r2::r2}, preprocessing::scaler::StandardScaler, utils::split::train_test_split,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
     let file = File::open("../data/multi_data.csv")?;
     let mut rdr = csv::Reader::from_reader(file);
 
-    // 1. Lecture : tout le fichier dans x et y
     let mut x: Vec<Vec<f32>> = Vec::new();
     let mut y: Vec<f32> = Vec::new();
 
@@ -27,11 +24,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let (x_train, x_test, y_train, y_test) = train_test_split(&x, &y, 0.2, Some(42));
+    
+    // scaler
+    let mut scaler = StandardScaler::new();
+    scaler.fit(&x_train);
+    let x_trained_scaled = scaler.transform(&x_train);
+    let x_test_scaled = scaler.transform(&x_test);
 
     // 3. Entraînement et évaluation : inchangés
     let mut model = MultipleLinearRegression::new(0.01, 5000);
-    model.fit(&x_train, &y_train);
-    let pred = model.predict(&x_test);
+    model.fit(&x_trained_scaled, &y_train);
+    let pred = model.predict(&x_test_scaled);
     let score = r2(&y_test, &pred);
     let mae = mae(&y_test, &pred);
 
