@@ -1,9 +1,12 @@
+use crate::metrics::error::mse::mean_squared_error;
 
 pub struct MultipleLinearRegression {
     weights: Vec<f32>,
     bias: f32,
     lr: f32,
     epoch: usize,
+    loss_history: Vec<f32>,
+    tol: Option<f32>,
 }
 
 impl MultipleLinearRegression {
@@ -14,6 +17,8 @@ impl MultipleLinearRegression {
             bias: 0.0,
             epoch: epoch,
             lr: lr,
+            loss_history: Vec::new(),
+            tol: None,
         }
     }
 
@@ -21,7 +26,11 @@ impl MultipleLinearRegression {
         let mut pred: Vec<f32> = Vec::new();
 
         for item in x {
-            assert_eq!(item.len(), self.weights.len(), "predict : chaque ligne doit avoir autant de colonnes que de poids");
+            assert_eq!(
+                item.len(),
+                self.weights.len(),
+                "predict : chaque ligne doit avoir autant de colonnes que de poids"
+            );
             let y = item
                 .iter()
                 .zip(&self.weights)
@@ -36,9 +45,9 @@ impl MultipleLinearRegression {
 
     pub fn fit(&mut self, x: &[Vec<f32>], y: &[f32]) {
         assert!(!x.is_empty(), "Erreur : X ne doit pas être vide");
-        assert_eq!(x.len() , y.len(), "Erreur : pas la même longueur");
+        assert_eq!(x.len(), y.len(), "Erreur : pas la même longueur");
 
-
+        self.loss_history.clear();
         let n_samples = x.len();
         let n_features = x[0].len();
 
@@ -58,14 +67,26 @@ impl MultipleLinearRegression {
                 let gradient = 2.0 * sum / n_samples as f32;
                 self.weights[j] -= self.lr * gradient;
             }
-
-            let mean_error:f32 = errors.iter().sum::<f32>() / errors.len() as f32;
+            let mse = mean_squared_error(y, &predict);
+            let mean_error: f32 = errors.iter().sum::<f32>() / errors.len() as f32;
             let gradient_b = 2.0 * mean_error;
 
             self.bias -= self.lr * gradient_b;
-
-            
+            self.loss_history.push(mse);
+            if let Some(tol) = self.tol {
+                let n = self.loss_history.len();
+                if n >= 2 {
+                    let amelioration = self.loss_history[n - 2] - self.loss_history[n - 1];
+                    if amelioration < tol {
+                        break;
+                    }
+                }
+            }
         }
+    }
+    pub fn with_tolerance(mut self, tol: f32) -> Self {
+        self.tol = Some(tol);
+        self
     }
 
     pub fn weights(&self) -> &[f32] {
@@ -75,8 +96,11 @@ impl MultipleLinearRegression {
     pub fn bias(&self) -> f32 {
         self.bias
     }
-}
 
+    pub fn loss_history(&self) -> &[f32] {
+        &self.loss_history
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -114,8 +138,16 @@ mod test {
 
         let pred = model.predict(&[vec![1.0, 1.0], vec![2.0, 0.0]]);
 
-        assert!((pred[0] - 6.0).abs() < 1e-5, "attendu 6, obtenu {}", pred[0]); // 2×1 + 3×1 + 1
-        assert!((pred[1] - 5.0).abs() < 1e-5, "attendu 5, obtenu {}", pred[1]); // 2×2 + 3×0 + 1
+        assert!(
+            (pred[0] - 6.0).abs() < 1e-5,
+            "attendu 6, obtenu {}",
+            pred[0]
+        ); // 2×1 + 3×1 + 1
+        assert!(
+            (pred[1] - 5.0).abs() < 1e-5,
+            "attendu 5, obtenu {}",
+            pred[1]
+        ); // 2×2 + 3×0 + 1
     }
 
     #[test]
@@ -129,7 +161,11 @@ mod test {
         let w = model.weights();
         assert!((w[0] - 2.0).abs() < EPS, "w1 attendu 2, obtenu {}", w[0]);
         assert!((w[1] - 3.0).abs() < EPS, "w2 attendu 3, obtenu {}", w[1]);
-        assert!((model.bias() - 5.0).abs() < EPS, "biais attendu 5, obtenu {}", model.bias());
+        assert!(
+            (model.bias() - 5.0).abs() < EPS,
+            "biais attendu 5, obtenu {}",
+            model.bias()
+        );
     }
 
     #[test]
@@ -141,8 +177,16 @@ mod test {
         let mut model = MultipleLinearRegression::new(0.01, 5000);
         model.fit(&x, &y);
 
-        assert!((model.weights()[0] - 4.0).abs() < EPS, "poids attendu 4, obtenu {}", model.weights()[0]);
-        assert!((model.bias() - 1.0).abs() < EPS, "biais attendu 1, obtenu {}", model.bias());
+        assert!(
+            (model.weights()[0] - 4.0).abs() < EPS,
+            "poids attendu 4, obtenu {}",
+            model.weights()[0]
+        );
+        assert!(
+            (model.bias() - 1.0).abs() < EPS,
+            "biais attendu 1, obtenu {}",
+            model.bias()
+        );
     }
 
     #[test]
@@ -194,5 +238,19 @@ mod test {
 
         // Entraîné sur 2 colonnes, on lui en donne 3
         model.predict(&[vec![1.0, 2.0, 3.0]]);
+    }
+
+    #[test]
+    fn early_stopping_arrete_avant_la_fin() {
+        let (x, y) = generate(200, &[2.0, 3.0], 5.0, 42);
+
+        let mut model = MultipleLinearRegression::new(0.01, 100_000).with_tolerance(1e-7);
+        model.fit(&x, &y);
+
+        assert!(
+            model.loss_history().len() < 100_000,
+            "le modèle aurait dû s'arrêter avant"
+        );
+        assert!((model.weights()[0] - 2.0).abs() < 1e-2);
     }
 }

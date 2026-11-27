@@ -1,48 +1,64 @@
 use std::{error::Error, fs::File};
 
-use ml::{linear::multiple_linear::MultipleLinearRegression, metrics::error::r2::r2};
+use ml::{
+    linear::multiple_linear::MultipleLinearRegression, metrics::error::{mae::mae, r2::r2}, plot::plotter::{plot_loss, plot_predictions}, preprocessing::scaler::StandardScaler, utils::split::train_test_split,
+};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let file = File::open("../data/multi_data.csv")?;
-    let mut rdr = csv::Reader::from_reader(file);
+    let file = File::open("../data/immobilier.csv")?;
+    let mut rdr = csv::ReaderBuilder::new().from_reader(file);
 
-    let mut x_train: Vec<Vec<f32>> = Vec::new();
-    let mut y_train: Vec<f32> = Vec::new();
-    let mut x_test: Vec<Vec<f32>> = Vec::new();
-    let mut y_test: Vec<f32> = Vec::new();
+    let headers = rdr.headers()?.clone();
 
-    for (i, result) in rdr.records().enumerate() {
+    let mut x: Vec<Vec<f32>> = Vec::new();
+    let mut y: Vec<f32> = Vec::new();
+
+    for result in rdr.records() {
         let record = result?;
         let n_cols = record.len();
 
-        // Toutes les colonnes sauf la dernière : les variables (x1, x2, x3)
         let mut row: Vec<f32> = Vec::with_capacity(n_cols - 1);
         for j in 0..n_cols - 1 {
-            row.push(record[j].parse()?);
+            row.push(record[j].trim().parse()?);
         }
-        // Dernière colonne : la cible y
-        let target: f32 = record[n_cols - 1].parse()?;
-
-        // Une ligne sur cinq en test
-        if i % 5 == 0 {
-            x_test.push(row);
-            y_test.push(target);
-        } else {
-            x_train.push(row);
-            y_train.push(target);
-        }
+        x.push(row);
+        y.push(record[n_cols - 1].trim().parse()?);
     }
 
-    let mut model = MultipleLinearRegression::new(0.01, 5000);
-    model.fit(&x_train, &y_train);
-    let pred = model.predict(&x_test);
-    let score = r2(&y_test, &pred);
+    println!("{} lignes, {} variables", x.len(), x[0].len());
 
-    println!("Poids : {:?}", model.weights());
-    println!("Biais : {:?}", model.bias());
-    println!("5 premières prédictions : {:?}", &pred[..5]);
-    println!("5 vraies valeurs        : {:?}", &y_test[..5]);
-    println!("R2 : {:?}", score);
+    let (x_train, x_test, y_train, y_test) = train_test_split(&x, &y, 0.2, Some(42));
+
+    // Scaler
+    let mut scaler = StandardScaler::new();
+    scaler.fit(&x_train);
+    let x_train_scaled = scaler.transform(&x_train);
+    let x_test_scaled = scaler.transform(&x_test);
+
+    // Entraînement
+    let mut model = MultipleLinearRegression::new(0.005, 100_000).with_tolerance(1e-6);
+    model.fit(&x_train_scaled, &y_train);
+
+    // Évaluation sur le train et sur le test
+    let pred_train = model.predict(&x_train_scaled);
+    let pred = model.predict(&x_test_scaled);
+
+    println!("MSE finale (train) : {:?}", model.loss_history().last());
+
+    // println!("\nPoids (échelle normalisée) :");
+    // for (j, w) in model.weights().iter().enumerate() {
+    //     println!("  {:<40} {:>8.3}", &headers[j], w);
+    // }
+    // println!("  {:<40} {:>8.3}", "biais", model.bias());
+
+    println!("\nR2  train : {:.4}", r2(&y_train, &pred_train));
+    println!("R2  test  : {:.4}", r2(&y_test, &pred));
+    println!("MAE test  : {:.4} points", mae(&y_test, &pred));
+
+    plot_loss(model.loss_history())?;
+    println!("\nCourbe de loss : result/loss_graph.png");
+    plot_predictions(&y_test, &pred)?;
+    println!("\nCourbe de prediction : result/predictions_graph.png");
 
     Ok(())
 }
