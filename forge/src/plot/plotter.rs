@@ -52,3 +52,78 @@ pub fn plot_loss(arr: &[f32]) -> Result<(), Box<dyn Error>> {
     root_area.present()?;
     Ok(())
 }
+
+
+const PRED_FILENAME: &str = "../result/predictions_graph.png";
+
+/// Nuage "vraie valeur vs prédiction", avec la diagonale y = x (prédiction parfaite).
+/// Plus les points sont proches de la diagonale, meilleur est le modèle.
+pub fn plot_predictions(y_true: &[f32], y_pred: &[f32]) -> Result<(), Box<dyn Error>> {
+    assert!(!y_true.is_empty(), "plot_predictions : aucune valeur à tracer");
+    assert_eq!(
+        y_true.len(),
+        y_pred.len(),
+        "plot_predictions : y_true et y_pred doivent avoir la même longueur"
+    );
+
+    if let Some(parent) = Path::new(PRED_FILENAME).parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Même échelle sur les deux axes, pour que la diagonale soit à 45°
+    let all = y_true.iter().chain(y_pred.iter()).cloned();
+    let min = all.clone().fold(f32::INFINITY, f32::min);
+    let max = all.fold(f32::NEG_INFINITY, f32::max);
+    assert!(
+        min.is_finite() && max.is_finite(),
+        "plot_predictions : les valeurs contiennent des NaN"
+    );
+    let margin = (max - min) * 0.05;
+    let (lo, hi) = (min - margin, max + margin);
+
+    let root_area = BitMapBackend::new(PRED_FILENAME, (900, 900)).into_drawing_area();
+    root_area.fill(&WHITE)?;
+
+    let mut chart = ChartBuilder::on(&root_area)
+        .caption("Vraie valeur vs prédiction", ("sans-serif", 40))
+        .margin(30)
+        .x_label_area_size(50)
+        .y_label_area_size(70)
+        .build_cartesian_2d(lo..hi, lo..hi)?;
+
+    chart
+        .configure_mesh()
+        .x_desc("Vraie valeur")
+        .y_desc("Prédiction")
+        .draw()?;
+
+    // Les points : un par ligne du jeu de test
+    chart
+        .draw_series(
+            y_true
+                .iter()
+                .zip(y_pred)
+                .map(|(t, p)| Circle::new((*t, *p), 4, RGBColor(0, 113, 227).mix(0.5).filled())),
+        )?
+        .label("Prédictions")
+        .legend(|(x, y)| Circle::new((x + 10, y), 4, RGBColor(0, 113, 227).filled()));
+
+    // La droite y = x : là où les points seraient si le modèle était parfait
+    chart
+        .draw_series(LineSeries::new(
+            vec![(lo, lo), (hi, hi)],
+            RGBColor(232, 89, 12).stroke_width(2),
+        ))?
+        .label("Prédiction parfaite (y = x)")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RGBColor(232, 89, 12).stroke_width(2)));
+
+    chart
+        .configure_series_labels()
+        .position(SeriesLabelPosition::UpperLeft)
+        .background_style(WHITE.mix(0.8))
+        .border_style(BLACK)
+        .draw()?;
+
+    root_area.present()?;
+    Ok(())
+}
