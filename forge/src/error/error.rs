@@ -9,9 +9,13 @@ pub enum ForgeError {
     NotFitted,
     Diverged { epoch: usize },
     Parse { line: usize, column: usize, value: String },
+    ZeroEcart { context : &'static str},
     InvalidParameter { context: &'static str, name: &'static str, value: f32, expected: &'static str },
     Io(std::io::Error),
     Json(serde_json::Error),
+    ConstantTarget {context :&'static str},
+    Csv(csv::Error),
+    Plot(String),
 }
 
 pub type Result<T> = std::result::Result<T, ForgeError>;
@@ -28,6 +32,10 @@ impl fmt::Display for ForgeError{
             ForgeError::Diverged { epoch }=> write!(f, "the training has diverged at {epoch} epoch : reduce the learning rate"),
             ForgeError::Io(e) => write!(f, "file error : {e}"),
             ForgeError::Json(e) => write!(f, "JSON error : {e}"),
+            ForgeError::ZeroEcart { context } => write!(f, "{context}"),
+            ForgeError::ConstantTarget { context } => write!(f, "{context}"),
+            ForgeError::Csv(e) => write!(f, "CSV error : {e}"),
+            ForgeError::Plot(e) => write!(f, "plot error : {e}"),
             ForgeError::InvalidParameter { context, name, value, expected } => write!(f, "{context} : invalid {name} ({value}), expected {expected}"),
         }
     }
@@ -44,5 +52,17 @@ impl From<std::io::Error> for ForgeError {
 impl From<serde_json::Error> for ForgeError {
     fn from(e: serde_json::Error) -> Self {
         ForgeError::Json(e)
+    }
+}
+
+impl From<csv::Error> for ForgeError {
+    fn from(e: csv::Error) -> Self {
+        ForgeError::Csv(e)
+    }
+}
+
+impl<E: std::error::Error + Send + Sync> From<plotters::drawing::DrawingAreaErrorKind<E>> for ForgeError {
+    fn from(e: plotters::drawing::DrawingAreaErrorKind<E>) -> Self {
+        ForgeError::Plot(e.to_string())
     }
 }

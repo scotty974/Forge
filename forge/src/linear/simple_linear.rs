@@ -1,4 +1,4 @@
-use crate::utils::calcul_linear::get_coefficient;
+use crate::{error::error::ForgeError, utils::calcul_linear::get_coefficient};
 
 pub struct LinearRegression{
     weights: f32,
@@ -13,9 +13,9 @@ impl LinearRegression {
     }
 
 
-    pub fn fit(&mut self, x : &[f32], y:&[f32])->(f32, f32){
-       (self.weights, self.bias) = get_coefficient(x, y).unwrap();
-       (self.weights, self.bias)
+    pub fn fit(&mut self, x : &[f32], y:&[f32])->Result<(f32, f32), ForgeError>{
+       (self.weights, self.bias) = get_coefficient(x, y)?;
+       Ok((self.weights, self.bias))
     }
 
 

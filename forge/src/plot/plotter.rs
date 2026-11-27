@@ -1,12 +1,16 @@
-use std::{error::Error, fs, path::Path};
+use std::{fs, path::Path};
 
 use plotters::prelude::*;
+
+use crate::error::error::ForgeError;
 
 const OUT_FILENAME: &str = "../result/loss_graph.png";
 
 
-pub fn plot_loss(arr: &[f32]) -> Result<(), Box<dyn Error>> {
-    assert!(!arr.is_empty(), "plot_loss : l'historique de loss est vide");
+pub fn plot_loss(arr: &[f32]) -> Result<(), ForgeError> {
+    if arr.is_empty() {
+        return Err(ForgeError::EmptyData { context: "plot_loss" });
+    }
 
     // Crée le dossier result/ s'il n'existe pas
     if let Some(parent) = Path::new(OUT_FILENAME).parent() {
@@ -20,10 +24,11 @@ pub fn plot_loss(arr: &[f32]) -> Result<(), Box<dyn Error>> {
         .filter(|v| *v > 0.0)
         .fold(f32::INFINITY, f32::min);
     let max_loss = arr.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    assert!(
-        min_loss.is_finite() && max_loss.is_finite(),
-        "plot_loss : la loss contient des NaN ou aucune valeur positive (learning rate trop grand ?)"
-    );
+    if !min_loss.is_finite() || !max_loss.is_finite() {
+        return Err(ForgeError::Plot(
+            "plot_loss : la loss contient des NaN ou aucune valeur positive (learning rate trop grand ?)".to_string(),
+        ));
+    }
 
     let root_area = BitMapBackend::new(OUT_FILENAME, (1024, 768)).into_drawing_area();
     root_area.fill(&WHITE)?;
@@ -58,13 +63,17 @@ const PRED_FILENAME: &str = "../result/predictions_graph.png";
 
 /// Nuage "vraie valeur vs prédiction", avec la diagonale y = x (prédiction parfaite).
 /// Plus les points sont proches de la diagonale, meilleur est le modèle.
-pub fn plot_predictions(y_true: &[f32], y_pred: &[f32]) -> Result<(), Box<dyn Error>> {
-    assert!(!y_true.is_empty(), "plot_predictions : aucune valeur à tracer");
-    assert_eq!(
-        y_true.len(),
-        y_pred.len(),
-        "plot_predictions : y_true et y_pred doivent avoir la même longueur"
-    );
+pub fn plot_predictions(y_true: &[f32], y_pred: &[f32]) -> Result<(), ForgeError> {
+    if y_true.is_empty() {
+        return Err(ForgeError::EmptyData { context: "plot_predictions" });
+    }
+    if y_true.len() != y_pred.len() {
+        return Err(ForgeError::LengthMismatch {
+            context: "plot_predictions",
+            left: y_true.len(),
+            right: y_pred.len(),
+        });
+    }
 
     if let Some(parent) = Path::new(PRED_FILENAME).parent() {
         fs::create_dir_all(parent)?;
@@ -74,10 +83,11 @@ pub fn plot_predictions(y_true: &[f32], y_pred: &[f32]) -> Result<(), Box<dyn Er
     let all = y_true.iter().chain(y_pred.iter()).cloned();
     let min = all.clone().fold(f32::INFINITY, f32::min);
     let max = all.fold(f32::NEG_INFINITY, f32::max);
-    assert!(
-        min.is_finite() && max.is_finite(),
-        "plot_predictions : les valeurs contiennent des NaN"
-    );
+    if !min.is_finite() || !max.is_finite() {
+        return Err(ForgeError::Plot(
+            "plot_predictions : les valeurs contiennent des NaN".to_string(),
+        ));
+    }
     let margin = (max - min) * 0.05;
     let (lo, hi) = (min - margin, max + margin);
 

@@ -1,4 +1,4 @@
-use crate::metrics::error::mse::mean_squared_error;
+use crate::{error::error::ForgeError, metrics::error::mse::mean_squared_error};
 
 pub struct MultipleLinearRegression {
     weights: Vec<f32>,
@@ -22,15 +22,17 @@ impl MultipleLinearRegression {
         }
     }
 
-    pub fn predict(&self, x: &[Vec<f32>]) -> Vec<f32> {
+    pub fn predict(&self, x: &[Vec<f32>]) -> Result<Vec<f32>, ForgeError> {
         let mut pred: Vec<f32> = Vec::new();
 
         for item in x {
-            assert_eq!(
-                item.len(),
-                self.weights.len(),
-                "predict : chaque ligne doit avoir autant de colonnes que de poids"
-            );
+            if item.len() != self.weights.len() {
+                return Err(ForgeError::LengthMismatch {
+                    context: "MultipleLinearRegression::predict",
+                    left: item.len(),
+                    right: self.weights.len(),
+                });
+            }
             let y = item
                 .iter()
                 .zip(&self.weights)
@@ -40,12 +42,23 @@ impl MultipleLinearRegression {
             pred.push(y);
         }
 
-        pred
+        Ok(pred)
     }
 
-    pub fn fit(&mut self, x: &[Vec<f32>], y: &[f32]) {
-        assert!(!x.is_empty(), "Erreur : X ne doit pas être vide");
-        assert_eq!(x.len(), y.len(), "Erreur : pas la même longueur");
+    pub fn fit(&mut self, x: &[Vec<f32>], y: &[f32]) -> Result<(), ForgeError> {
+        if x.is_empty() {
+            return Err(ForgeError::EmptyData {
+                context: "MultipleLinearRegression::fit",
+            });
+        }
+
+        if x.len() != y.len() {
+            return Err(ForgeError::LengthMismatch {
+                context: "MultipleLinearRegression::fit",
+                left: x.len(),
+                right: y.len(),
+            });
+        }
 
         self.loss_history.clear();
         let n_samples = x.len();
@@ -54,8 +67,8 @@ impl MultipleLinearRegression {
         self.weights = vec![0.0; n_features];
         self.bias = 0.0;
 
-        for _ in 0..self.epoch {
-            let predict = self.predict(x);
+        for epoch in 0..self.epoch {
+            let predict = self.predict(x)?;
 
             let errors: Vec<f32> = predict.iter().zip(y).map(|(p, yi)| p - yi).collect();
 
@@ -67,7 +80,10 @@ impl MultipleLinearRegression {
                 let gradient = 2.0 * sum / n_samples as f32;
                 self.weights[j] -= self.lr * gradient;
             }
-            let mse = mean_squared_error(y, &predict);
+            let mse = mean_squared_error(y, &predict)?;
+            if !mse.is_finite() {
+                return Err(ForgeError::Diverged { epoch });
+            }
             let mean_error: f32 = errors.iter().sum::<f32>() / errors.len() as f32;
             let gradient_b = 2.0 * mean_error;
 
@@ -83,6 +99,7 @@ impl MultipleLinearRegression {
                 }
             }
         }
+        Ok(())
     }
     pub fn with_tolerance(mut self, tol: f32) -> Self {
         self.tol = Some(tol);
@@ -136,7 +153,7 @@ mod test {
         model.weights = vec![2.0, 3.0];
         model.bias = 1.0;
 
-        let pred = model.predict(&[vec![1.0, 1.0], vec![2.0, 0.0]]);
+        let pred = model.predict(&[vec![1.0, 1.0], vec![2.0, 0.0]]).unwrap();
 
         assert!(
             (pred[0] - 6.0).abs() < 1e-5,
@@ -156,7 +173,7 @@ mod test {
         let (x, y) = generate(500, &[2.0, 3.0], 5.0, 42);
 
         let mut model = MultipleLinearRegression::new(0.01, 5000);
-        model.fit(&x, &y);
+        model.fit(&x, &y).unwrap();
 
         let w = model.weights();
         assert!((w[0] - 2.0).abs() < EPS, "w1 attendu 2, obtenu {}", w[0]);
@@ -175,7 +192,7 @@ mod test {
         let (x, y) = generate(300, &[4.0], 1.0, 7);
 
         let mut model = MultipleLinearRegression::new(0.01, 5000);
-        model.fit(&x, &y);
+        model.fit(&x, &y).unwrap();
 
         assert!(
             (model.weights()[0] - 4.0).abs() < EPS,
@@ -195,8 +212,8 @@ mod test {
         let (x_test, y_test) = generate(50, &[2.0, 3.0], 5.0, 99);
 
         let mut model = MultipleLinearRegression::new(0.01, 5000);
-        model.fit(&x_train, &y_train);
-        let pred = model.predict(&x_test);
+        model.fit(&x_train, &y_train).unwrap();
+        let pred = model.predict(&x_test).unwrap();
 
         for (p, yt) in pred.iter().zip(&y_test) {
             assert!((p - yt).abs() < 1e-2, "prédiction {p}, attendu {yt}");
@@ -204,40 +221,44 @@ mod test {
     }
 
     #[test]
-    #[should_panic(expected = "ne doit pas être vide")]
     fn fit_x_vide() {
         let x: Vec<Vec<f32>> = vec![];
         let y: Vec<f32> = vec![];
 
-        MultipleLinearRegression::new(0.01, 10).fit(&x, &y);
+        let result = MultipleLinearRegression::new(0.01, 10).fit(&x, &y);
+
+        assert!(matches!(result, Err(ForgeError::EmptyData { .. })));
     }
 
     #[test]
-    #[should_panic(expected = "pas la même longueur")]
     fn fit_longueurs_differentes() {
         let x = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
         let y = vec![1.0];
 
-        MultipleLinearRegression::new(0.01, 10).fit(&x, &y);
+        let result = MultipleLinearRegression::new(0.01, 10).fit(&x, &y);
+
+        assert!(matches!(result, Err(ForgeError::LengthMismatch { .. })));
     }
 
     #[test]
-    #[should_panic(expected = "autant de colonnes que de poids")]
     fn predict_avant_fit() {
         let model = MultipleLinearRegression::new(0.01, 10);
 
-        model.predict(&[vec![1.0, 2.0]]);
+        let result = model.predict(&[vec![1.0, 2.0]]);
+
+        assert!(matches!(result, Err(ForgeError::LengthMismatch { .. })));
     }
 
     #[test]
-    #[should_panic(expected = "autant de colonnes que de poids")]
     fn predict_mauvais_nombre_de_colonnes() {
         let (x, y) = generate(100, &[2.0, 3.0], 5.0, 1);
         let mut model = MultipleLinearRegression::new(0.01, 100);
-        model.fit(&x, &y);
+        model.fit(&x, &y).unwrap();
 
         // Entraîné sur 2 colonnes, on lui en donne 3
-        model.predict(&[vec![1.0, 2.0, 3.0]]);
+        let result = model.predict(&[vec![1.0, 2.0, 3.0]]);
+
+        assert!(matches!(result, Err(ForgeError::LengthMismatch { .. })));
     }
 
     #[test]
@@ -245,7 +266,7 @@ mod test {
         let (x, y) = generate(200, &[2.0, 3.0], 5.0, 42);
 
         let mut model = MultipleLinearRegression::new(0.01, 100_000).with_tolerance(1e-7);
-        model.fit(&x, &y);
+        model.fit(&x, &y).unwrap();
 
         assert!(
             model.loss_history().len() < 100_000,

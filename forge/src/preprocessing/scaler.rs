@@ -1,21 +1,41 @@
-use crate::{error::error::ForgeError, utils::calcul_linear::{get_mean, variance}};
+use crate::{
+    error::error::ForgeError,
+    utils::calcul_linear::{get_mean, variance},
+};
 
 pub struct StandardScaler {
     mean: Vec<f32>,
-    stds: Vec<f32>
-
+    stds: Vec<f32>,
 }
 
 impl StandardScaler {
     pub fn new() -> Self {
-        StandardScaler { mean: Vec::new(), stds: Vec::new() }
+        StandardScaler {
+            mean: Vec::new(),
+            stds: Vec::new(),
+        }
     }
 
     pub fn fit(&mut self, data: &[Vec<f32>]) -> Result<(), ForgeError> {
+        if data.is_empty() {
+            return Err(ForgeError::EmptyData {
+                context: "StandardScaler::fit",
+            });
+        }
 
-        assert!(!data.is_empty(), "scaler : data is empty");
         let n_sample = data.len();
         let n_features = data[0].len();
+
+        // Toutes les lignes doivent avoir le même nombre de colonnes que la première
+        for row in data {
+            if row.len() != n_features {
+                return Err(ForgeError::LengthMismatch {
+                    context: "StandardScaler::fit",
+                    left: row.len(),
+                    right: n_features,
+                });
+            }
+        }
 
         self.mean = Vec::with_capacity(n_features);
         self.stds = Vec::with_capacity(n_features);
@@ -24,35 +44,43 @@ impl StandardScaler {
             let col: Vec<f32> = data.iter().map(|row| row[j]).collect();
 
             let mean_col = get_mean(&col)?;
+            let s = variance(&col, mean_col, n_sample as f32).sqrt();
 
-            let s = variance(
-                &col,
-                mean_col,
-                n_sample as f32,
-            )
-            .sqrt();
+            if s == 0.0 {
+                return Err(ForgeError::ZeroVariance { column: j });
+            }
 
-        assert_ne!(s, 0.0, "scaler : ecart type 0 ");
-
-        self.mean.push(mean_col);
-        self.stds.push(s);
+            self.mean.push(mean_col);
+            self.stds.push(s);
         }
         Ok(())
     }
 
-    pub fn transform(&self, data: &[Vec<f32>]) -> Vec<Vec<f32>>{
+    pub fn transform(&self, data: &[Vec<f32>]) -> Result<Vec<Vec<f32>>, ForgeError> {
+        // Pas de moyennes apprises : fit n'a pas été appelé
+        if self.mean.is_empty() {
+            return Err(ForgeError::NotFitted);
+        }
+
         let mut result: Vec<Vec<f32>> = Vec::with_capacity(data.len());
-        for row in data{
-            assert_eq!(row.len(), self.mean.len(), "transform : data len is different of row len");
+        for row in data {
+            if row.len() != self.mean.len() {
+                return Err(ForgeError::LengthMismatch {
+                    context: "StandardScaler::transform",
+                    left: row.len(),
+                    right: self.mean.len(),
+                });
+            }
+
             let mut new_row: Vec<f32> = Vec::with_capacity(row.len());
-            for j in 0..row.len(){
+            for j in 0..row.len() {
                 let z = (row[j] - self.mean[j]) / self.stds[j];
                 new_row.push(z);
             }
-            result.push(new_row)
+            result.push(new_row);
         }
 
-        result
+        Ok(result)
     }
 
     pub fn mean_(&self) -> Vec<f32> {
@@ -86,7 +114,7 @@ mod test {
         let data = vec![vec![1.0], vec![2.0], vec![3.0]];
 
         let mut scaler = StandardScaler::new();
-        scaler.fit(&data);
+        scaler.fit(&data).unwrap();
 
         assert!((scaler.mean[0] - 2.0).abs() < EPS);
         assert!((scaler.stds[0] - (2.0f32 / 3.0).sqrt()).abs() < EPS);
@@ -98,7 +126,7 @@ mod test {
         let data = vec![vec![1.0, 10.0], vec![2.0, 20.0], vec![3.0, 30.0]];
 
         let mut scaler = StandardScaler::new();
-        scaler.fit(&data);
+        scaler.fit(&data).unwrap();
 
         assert_eq!(scaler.mean_(), vec![2.0, 20.0]);
         assert_eq!(scaler.stds.len(), 2);
@@ -107,8 +135,8 @@ mod test {
     #[test]
     fn fit_deux_fois_remplace_les_valeurs() {
         let mut scaler = StandardScaler::new();
-        scaler.fit(&[vec![1.0], vec![3.0]]);
-        scaler.fit(&[vec![10.0], vec![30.0]]);
+        scaler.fit(&[vec![1.0], vec![3.0]]).unwrap();
+        scaler.fit(&[vec![10.0], vec![30.0]]).unwrap();
 
         // Pas d'accumulation : une seule moyenne, celle du second fit
         assert_eq!(scaler.mean_(), vec![20.0]);
@@ -122,8 +150,8 @@ mod test {
         let data = vec![vec![1.0], vec![2.0], vec![3.0]];
 
         let mut scaler = StandardScaler::new();
-        scaler.fit(&data);
-        let z = scaler.transform(&data);
+        scaler.fit(&data).unwrap();
+        let z = scaler.transform(&data).unwrap();
 
         assert!((z[0][0] + 1.2247).abs() < EPS, "obtenu {}", z[0][0]);
         assert!(z[1][0].abs() < EPS, "obtenu {}", z[1][0]);
@@ -141,8 +169,8 @@ mod test {
             .collect();
 
         let mut scaler = StandardScaler::new();
-        scaler.fit(&data);
-        let z = scaler.transform(&data);
+        scaler.fit(&data).unwrap();
+        let z = scaler.transform(&data).unwrap();
 
         for j in 0..3 {
             let (m, s) = moyenne_ecart_type(&colonne(&z, j));
@@ -158,8 +186,8 @@ mod test {
         let test = vec![vec![2.0], vec![6.0]];
 
         let mut scaler = StandardScaler::new();
-        scaler.fit(&train);
-        let z = scaler.transform(&test);
+        scaler.fit(&train).unwrap();
+        let z = scaler.transform(&test).unwrap();
 
         let s = (8.0f32 / 3.0).sqrt();
         // 2 est la moyenne du train → 0
@@ -174,8 +202,8 @@ mod test {
         let copie = data.clone();
 
         let mut scaler = StandardScaler::new();
-        scaler.fit(&data);
-        let _ = scaler.transform(&data);
+        scaler.fit(&data).unwrap();
+        let _ = scaler.transform(&data).unwrap();
 
         assert_eq!(data, copie);
     }
@@ -185,44 +213,64 @@ mod test {
         let data = vec![vec![1.0, 10.0, 5.0], vec![2.0, 20.0, 7.0]];
 
         let mut scaler = StandardScaler::new();
-        scaler.fit(&data);
-        let z = scaler.transform(&data);
+        scaler.fit(&data).unwrap();
+        let z = scaler.transform(&data).unwrap();
 
         assert_eq!(z.len(), 2);
         assert!(z.iter().all(|row| row.len() == 3));
     }
 
-    // ---------- Cas qui doivent paniquer ----------
+    // ---------- Cas qui doivent renvoyer une erreur ----------
 
     #[test]
-    #[should_panic(expected = "data is empty")]
     fn fit_donnees_vides() {
         let data: Vec<Vec<f32>> = vec![];
-        StandardScaler::new().fit(&data);
+
+        let result = StandardScaler::new().fit(&data);
+
+        assert!(matches!(result, Err(ForgeError::EmptyData { .. })));
     }
 
     #[test]
-    #[should_panic(expected = "ecart type 0")]
     fn fit_colonne_constante() {
         // La colonne 1 vaut toujours 5 : écart-type nul
         let data = vec![vec![1.0, 5.0], vec![2.0, 5.0], vec![3.0, 5.0]];
-        StandardScaler::new().fit(&data);
+
+        let result = StandardScaler::new().fit(&data);
+
+        // L'erreur indique bien la colonne fautive : la 1
+        assert!(matches!(result, Err(ForgeError::ZeroVariance { column: 1 })));
     }
 
     #[test]
-    #[should_panic(expected = "data len is different of row len")]
+    fn fit_lignes_de_longueurs_differentes() {
+        let data = vec![vec![1.0, 2.0], vec![3.0]];
+
+        let result = StandardScaler::new().fit(&data);
+
+        assert!(matches!(result, Err(ForgeError::LengthMismatch { .. })));
+    }
+
+    #[test]
     fn transform_avant_fit() {
         let scaler = StandardScaler::new();
-        scaler.transform(&[vec![1.0, 2.0]]);
+
+        let result = scaler.transform(&[vec![1.0, 2.0]]);
+
+        assert!(matches!(result, Err(ForgeError::NotFitted)));
     }
 
     #[test]
-    #[should_panic(expected = "data len is different of row len")]
     fn transform_mauvais_nombre_de_colonnes() {
         let mut scaler = StandardScaler::new();
-        scaler.fit(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        scaler.fit(&[vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
 
         // Appris sur 2 colonnes, on lui en donne 3
-        scaler.transform(&[vec![1.0, 2.0, 3.0]]);
+        let result = scaler.transform(&[vec![1.0, 2.0, 3.0]]);
+
+        assert!(matches!(
+            result,
+            Err(ForgeError::LengthMismatch { left: 3, right: 2, .. })
+        ));
     }
 }

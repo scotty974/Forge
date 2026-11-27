@@ -1,30 +1,33 @@
+use crate::error::error::ForgeError;
 
-pub fn r2(y: &[f32], y_pred: &[f32]) -> f32 {
-    assert_eq!(
-        y.len(),
-        y_pred.len(),
-        "r2 : y et y_pred doivent avoir la même longueur"
-    );
-    assert!(!y.is_empty(), "r2 : y ne doit pas être vide");
+
+pub fn r2(y: &[f32], y_pred: &[f32]) -> Result<f32, ForgeError> {
+    if y.len() != y_pred.len() {
+        return Err(ForgeError::LengthMismatch {
+            context: "r2",
+            left: y.len(),
+            right: y_pred.len(),
+        });
+    }
+
+    if y.is_empty() {
+        return Err(ForgeError::EmptyData { context: "r2" });
+    }
 
     let y_mean: f32 = y.iter().sum::<f32>() / y.len() as f32;
 
     // Somme des carrés des résidus : erreurs du modèle
-    let ss_res: f32 = y
-        .iter()
-        .zip(y_pred)
-        .map(|(yi, pi)| (yi - pi).powi(2))
-        .sum();
+    let ss_res: f32 = y.iter().zip(y_pred).map(|(yi, pi)| (yi - pi).powi(2)).sum();
 
     // Somme totale des carrés : dispersion de y autour de sa moyenne
     let ss_tot: f32 = y.iter().map(|yi| (yi - y_mean).powi(2)).sum();
 
-    assert!(
-        ss_tot != 0.0,
-        "r2 : variance de y nulle, tous les y sont identiques"
-    );
+    // Cas d'erreur : tous les y sont identiques, le R² n'est pas défini
+    if ss_tot == 0.0 {
+        return Err(ForgeError::ConstantTarget { context: "r2" });
+    }
 
-    1.0 - ss_res / ss_tot
+    Ok(1.0 - ss_res / ss_tot)
 }
 
 #[cfg(test)]
@@ -33,11 +36,13 @@ mod test {
 
     const EPS: f32 = 1e-5;
 
+    // ---------- Cas qui doivent réussir ----------
+
     #[test]
     fn r2_prediction_parfaite() {
         let y = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 
-        assert!((r2(&y, &y) - 1.0).abs() < EPS);
+        assert!((r2(&y, &y).unwrap() - 1.0).abs() < EPS);
     }
 
     #[test]
@@ -45,7 +50,7 @@ mod test {
         let y = vec![1.0, 2.0, 3.0];
         let pred = vec![2.0, 2.0, 2.0];
 
-        assert!(r2(&y, &pred).abs() < EPS);
+        assert!(r2(&y, &pred).unwrap().abs() < EPS);
     }
 
     #[test]
@@ -53,27 +58,35 @@ mod test {
         let y = vec![1.0, 2.0, 3.0];
         let pred = vec![3.0, 2.0, 1.0];
 
-        assert!(r2(&y, &pred) < 0.0);
+        assert!(r2(&y, &pred).unwrap() < 0.0);
     }
 
+    // ---------- Cas qui doivent renvoyer une erreur ----------
+
     #[test]
-    #[should_panic(expected = "variance de y nulle")]
     fn r2_y_identiques() {
         let y = vec![4.0, 4.0, 4.0];
         let pred = vec![1.0, 2.0, 3.0];
 
-        r2(&y, &pred);
+        let result = r2(&y, &pred);
+
+        assert!(matches!(result, Err(ForgeError::ConstantTarget { .. })));
     }
 
     #[test]
-    #[should_panic(expected = "même longueur")]
     fn r2_longueurs_differentes() {
-        r2(&[1.0, 2.0, 3.0], &[1.0, 2.0]);
+        let result = r2(&[1.0, 2.0, 3.0], &[1.0, 2.0]);
+
+        assert!(matches!(
+            result,
+            Err(ForgeError::LengthMismatch { left: 3, right: 2, .. })
+        ));
     }
 
     #[test]
-    #[should_panic(expected = "y ne doit pas être vide")]
     fn r2_vide() {
-        r2(&[], &[]);
+        let result = r2(&[], &[]);
+
+        assert!(matches!(result, Err(ForgeError::EmptyData { .. })));
     }
 }

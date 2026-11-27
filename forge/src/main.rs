@@ -1,10 +1,11 @@
-use std::{error::Error, fs::File};
+use std::fs::File;
 
 use ml::{
+    error::error::ForgeError,
     linear::multiple_linear::MultipleLinearRegression, metrics::error::{mae::mae, r2::r2}, plot::plotter::{plot_loss, plot_predictions}, preprocessing::scaler::StandardScaler, utils::split::train_test_split,
 };
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), ForgeError> {
     let file = File::open("../data/immobilier.csv")?;
     let mut rdr = csv::ReaderBuilder::new().from_reader(file);
 
@@ -13,16 +14,38 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut x: Vec<Vec<f32>> = Vec::new();
     let mut y: Vec<f32> = Vec::new();
 
-    for result in rdr.records() {
+    // Ligne 1 = en-têtes, les données commencent à la ligne 2
+    for (i, result) in rdr.records().enumerate() {
         let record = result?;
+        let line = i + 2;
         let n_cols = record.len();
 
+        if n_cols < 2 {
+            return Err(ForgeError::LengthMismatch {
+                context: "lecture CSV : au moins 2 colonnes attendues",
+                left: n_cols,
+                right: headers.len(),
+            });
+        }
+
         let mut row: Vec<f32> = Vec::with_capacity(n_cols - 1);
-        for j in 0..n_cols - 1 {
-            row.push(record[j].trim().parse()?);
+        for (column, field) in record.iter().enumerate() {
+            let value: f32 = field.trim().parse().map_err(|_| ForgeError::Parse {
+                line,
+                column,
+                value: field.to_string(),
+            })?;
+            if column == n_cols - 1 {
+                y.push(value);
+            } else {
+                row.push(value);
+            }
         }
         x.push(row);
-        y.push(record[n_cols - 1].trim().parse()?);
+    }
+
+    if x.is_empty() {
+        return Err(ForgeError::EmptyData { context: "lecture CSV" });
     }
 
     println!("{} lignes, {} variables", x.len(), x[0].len());
@@ -31,17 +54,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Scaler
     let mut scaler = StandardScaler::new();
-    scaler.fit(&x_train);
-    let x_train_scaled = scaler.transform(&x_train);
-    let x_test_scaled = scaler.transform(&x_test);
+    scaler.fit(&x_train)?;
+    let x_train_scaled = scaler.transform(&x_train)?;
+    let x_test_scaled = scaler.transform(&x_test)?;
 
     // Entraînement
     let mut model = MultipleLinearRegression::new(0.005, 100_000).with_tolerance(1e-6);
-    model.fit(&x_train_scaled, &y_train);
+    model.fit(&x_train_scaled, &y_train)?;
 
     // Évaluation sur le train et sur le test
-    let pred_train = model.predict(&x_train_scaled);
-    let pred = model.predict(&x_test_scaled);
+    let pred_train = model.predict(&x_train_scaled)?;
+    let pred = model.predict(&x_test_scaled)?;
 
     println!("MSE finale (train) : {:?}", model.loss_history().last());
 
@@ -51,9 +74,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // }
     // println!("  {:<40} {:>8.3}", "biais", model.bias());
 
-    println!("\nR2  train : {:.4}", r2(&y_train, &pred_train));
-    println!("R2  test  : {:.4}", r2(&y_test, &pred));
-    println!("MAE test  : {:.4} points", mae(&y_test, &pred));
+    println!("\nR2  train : {:.4}", r2(&y_train, &pred_train)?);
+    println!("R2  test  : {:.4}", r2(&y_test, &pred)?);
+    println!("MAE test  : {:.4} points", mae(&y_test, &pred)?);
 
     plot_loss(model.loss_history())?;
     println!("\nCourbe de loss : result/loss_graph.png");
