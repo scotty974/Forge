@@ -9,6 +9,7 @@ pub enum ForgeError {
     NotFitted,
     Diverged { epoch: usize },
     Parse { line: usize, column: usize, value: String },
+    InvalidParameter { context: &'static str, name: &'static str, value: f32, expected: &'static str },
     Io(std::io::Error),
     Json(serde_json::Error),
 }
@@ -27,9 +28,12 @@ impl fmt::Display for ForgeError{
             ForgeError::Diverged { epoch }=> write!(f, "the training has diverged at {epoch} epoch : reduce the learning rate"),
             ForgeError::Io(e) => write!(f, "file error : {e}"),
             ForgeError::Json(e) => write!(f, "JSON error : {e}"),
+            ForgeError::InvalidParameter { context, name, value, expected } => write!(f, "{context} : invalid {name} ({value}), expected {expected}"),
         }
     }
 }
+
+impl std::error::Error for ForgeError {}
 
 impl From<std::io::Error> for ForgeError {
     fn from(e: std::io::Error) -> Self {

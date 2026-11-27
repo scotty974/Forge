@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("{} lignes, {} variables", x.len(), x[0].len());
 
-    let (x_train, x_test, y_train, y_test) = train_test_split(&x, &y, 0.2, Some(42));
+    let (x_train, x_test, y_train, y_test) = train_test_split(&x, &y, 0.2, Some(42))?;
 
     // Scaler
     let mut scaler = StandardScaler::new();
