@@ -1,7 +1,7 @@
 use std::{error::Error, fs::File};
 
 use ml::{
-    linear::multiple_linear::MultipleLinearRegression, metrics::error::{mae::mae, r2::r2}, preprocessing::scaler::StandardScaler, utils::split::train_test_split,
+    linear::multiple_linear::MultipleLinearRegression, metrics::error::{mae::mae, r2::r2}, plot::plotter::plot_loss, preprocessing::scaler::StandardScaler, utils::split::train_test_split,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -37,14 +37,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pred = model.predict(&x_test_scaled);
     let score = r2(&y_test, &pred);
     let mae = mae(&y_test, &pred);
+    let history = model.loss_history();
+    let _ = plot_loss(history);
 
-    println!("Poids : {:?}", model.weights());
-    println!("Biais : {:?}", model.bias());
     println!("5 premières prédictions : {:?}", &pred[..5]);
     println!("5 vraies valeurs        : {:?}", &y_test[..5]);
     println!("R2 : {:?}", score);
     println!("MAE : {:?}", mae);
-    println!("Loss History : {:?}", model.loss_history());
+    println!("Loss History : {:?}", history);
+
 
     Ok(())
 }
