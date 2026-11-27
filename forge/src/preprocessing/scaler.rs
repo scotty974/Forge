@@ -2,7 +2,8 @@ use crate::utils::calcul_linear::{get_mean, variance};
 
 pub struct StandardScaler {
     mean: Vec<f32>,
-    stds: Vec<f32>,
+    stds: Vec<f32>
+
 }
 
 impl StandardScaler {

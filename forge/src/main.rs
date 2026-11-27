@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let (x_train, x_test, y_train, y_test) = train_test_split(&x, &y, 0.2, Some(42));
-    
+
     // scaler
     let mut scaler = StandardScaler::new();
     scaler.fit(&x_train);
