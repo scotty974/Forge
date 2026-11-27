@@ -239,4 +239,18 @@ mod test {
         // Entraîné sur 2 colonnes, on lui en donne 3
         model.predict(&[vec![1.0, 2.0, 3.0]]);
     }
+
+    #[test]
+    fn early_stopping_arrete_avant_la_fin() {
+        let (x, y) = generate(200, &[2.0, 3.0], 5.0, 42);
+
+        let mut model = MultipleLinearRegression::new(0.01, 100_000).with_tolerance(1e-7);
+        model.fit(&x, &y);
+
+        assert!(
+            model.loss_history().len() < 100_000,
+            "le modèle aurait dû s'arrêter avant"
+        );
+        assert!((model.weights()[0] - 2.0).abs() < 1e-2);
+    }
 }
