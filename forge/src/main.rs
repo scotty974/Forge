@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let x_test_scaled = scaler.transform(&x_test);
 
     // 3. Entraînement et évaluation : inchangés
-    let mut model = MultipleLinearRegression::new(0.01, 5000);
+    let mut model = MultipleLinearRegression::new(0.01, 5000).with_tolerance(1e-6);
     model.fit(&x_trained_scaled, &y_train);
     let pred = model.predict(&x_test_scaled);
     let score = r2(&y_test, &pred);
@@ -44,6 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("5 vraies valeurs        : {:?}", &y_test[..5]);
     println!("R2 : {:?}", score);
     println!("MAE : {:?}", mae);
+    println!("Loss History : {:?}", model.loss_history());
 
     Ok(())
 }
