@@ -14,7 +14,7 @@ impl LinearRegression {
 
 
     pub fn fit(&mut self, x : &[f32], y:&[f32])->(f32, f32){
-       (self.weights, self.bias) = get_coefficient(x, y);
+       (self.weights, self.bias) = get_coefficient(x, y).unwrap();
        (self.weights, self.bias)
     }
 

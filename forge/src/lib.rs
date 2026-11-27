@@ -4,3 +4,4 @@ pub mod metrics;
 pub mod preprocessing;
 pub mod plot;
 pub mod bench;
+pub mod error;

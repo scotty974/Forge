@@ -1,4 +1,4 @@
-use crate::utils::calcul_linear::{get_mean, variance};
+use crate::{error::error::ForgeError, utils::calcul_linear::{get_mean, variance}};
 
 pub struct StandardScaler {
     mean: Vec<f32>,
@@ -11,7 +11,7 @@ impl StandardScaler {
         StandardScaler { mean: Vec::new(), stds: Vec::new() }
     }
 
-    pub fn fit(&mut self, data: &[Vec<f32>]) {
+    pub fn fit(&mut self, data: &[Vec<f32>]) -> Result<(), ForgeError> {
 
         assert!(!data.is_empty(), "scaler : data is empty");
         let n_sample = data.len();
@@ -23,7 +23,7 @@ impl StandardScaler {
         for j in 0..n_features {
             let col: Vec<f32> = data.iter().map(|row| row[j]).collect();
 
-            let mean_col = get_mean(&col).expect("scaler : get mean by col ");
+            let mean_col = get_mean(&col)?;
 
             let s = variance(
                 &col,
@@ -37,6 +37,7 @@ impl StandardScaler {
         self.mean.push(mean_col);
         self.stds.push(s);
         }
+        Ok(())
     }
 
     pub fn transform(&self, data: &[Vec<f32>]) -> Vec<Vec<f32>>{
